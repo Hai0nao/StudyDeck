@@ -1,0 +1,122 @@
+.ai-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-title svg {
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+.ai-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ai-row > .field {
+  min-width: 180px;
+}
+.ai-method {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--r-lg);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+}
+.ai-nokey {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 14px;
+  color: var(--text-2);
+}
+.ai-nokey svg {
+  width: 18px;
+  height: 18px;
+  color: var(--hard);
+  flex: none;
+  margin-top: 2px;
+}
+.link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 3px;
+}
+.ai-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-left: 20px;
+  font-size: 14px;
+  color: var(--text-2);
+}
+.ai-steps li::marker {
+  color: var(--text-3);
+  font-weight: 600;
+}
+.ai-steps .textarea {
+  margin-top: 8px;
+  min-height: 80px;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.ai-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.ai-error {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--again-soft);
+  color: var(--again);
+  font-size: 14px;
+}
+.ai-preview {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.ai-preview li + li {
+  border-top: 1px solid var(--line);
+}
+.ai-preview label {
+  display: grid;
+  grid-template-columns: auto minmax(90px, 1fr) 2fr;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.ai-preview label:hover {
+  background: var(--surface-2);
+}
+.ai-preview input {
+  margin-top: 4px;
+  accent-color: var(--accent);
+}
+.ai-preview b {
+  font-weight: 600;
+}
+.ai-preview span {
+  color: var(--text-2);
+}
+.ai-preview li.off {
+  opacity: 0.4;
+}
+@media (max-width: 640px) {
+  .ai-preview label {
+    grid-template-columns: auto 1fr;
+  }
+  .ai-preview span {
+    grid-column: 2;
+  }
+}

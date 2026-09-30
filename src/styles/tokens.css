@@ -1,0 +1,77 @@
+/* ============================================================
+   Design tokens — black-first, one accent colour at a time.
+   ============================================================ */
+:root {
+  color-scheme: dark;
+
+  --bg: #09090a;
+  --bg-raised: #0f0f10;
+  --surface: #141415;
+  --surface-2: #1a1a1c;
+  --surface-3: #222225;
+  --line: #232326;
+  --line-strong: #303034;
+
+  --text: #ececee;
+  --text-2: #a0a0a8;
+  --text-3: #6a6a72;
+
+  /* accent (overridden by [data-accent]) */
+  --accent: #c8f25a;
+  --accent-hover: #d6f77f;
+  --accent-ink: #0b0c06;
+  --accent-soft: rgb(200 242 90 / 0.12);
+  --accent-line: rgb(200 242 90 / 0.35);
+
+  /* feedback + SRS ratings */
+  --again: #f47171;
+  --hard: #f5b84a;
+  --good: #5fd49a;
+  --easy: #6aa8ff;
+  --again-soft: rgb(244 113 113 / 0.12);
+  --hard-soft: rgb(245 184 74 / 0.12);
+  --good-soft: rgb(95 212 154 / 0.12);
+  --easy-soft: rgb(106 168 255 / 0.12);
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --pill: 999px;
+
+  --shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px rgb(0 0 0 / 0.45);
+  --shadow-pop: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 24px 60px rgb(0 0 0 / 0.6);
+
+  --font: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --sidebar: 248px;
+}
+
+[data-accent="violet"] {
+  --accent: #a995ff;
+  --accent-hover: #bcadff;
+  --accent-ink: #0d0a1f;
+  --accent-soft: rgb(169 149 255 / 0.13);
+  --accent-line: rgb(169 149 255 / 0.38);
+}
+[data-accent="sky"] {
+  --accent: #5ccbff;
+  --accent-hover: #83d8ff;
+  --accent-ink: #04121a;
+  --accent-soft: rgb(92 203 255 / 0.12);
+  --accent-line: rgb(92 203 255 / 0.35);
+}
+[data-accent="coral"] {
+  --accent: #ff8a70;
+  --accent-hover: #ffa38e;
+  --accent-ink: #1a0804;
+  --accent-soft: rgb(255 138 112 / 0.12);
+  --accent-line: rgb(255 138 112 / 0.36);
+}
+[data-accent="amber"] {
+  --accent: #ffc857;
+  --accent-hover: #ffd580;
+  --accent-ink: #1a1203;
+  --accent-soft: rgb(255 200 87 / 0.12);
+  --accent-line: rgb(255 200 87 / 0.36);
+}

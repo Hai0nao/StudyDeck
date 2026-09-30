@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" data-accent="lime">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#09090a" />
+    <meta name="description" content="Personal flashcards with spaced repetition and AI import." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <title>StudyDeck</title>
+    <script>
+      // Apply the saved accent before first paint to avoid a colour flash.
+      try {
+        var s = JSON.parse(localStorage.getItem("studydeck.v3") || "{}");
+        var a = s.state && s.state.settings && s.state.settings.accent;
+        if (a) document.documentElement.dataset.accent = a;
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,144 @@
+.st-section {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 24px;
+  padding: 28px 0;
+  border-top: 1px solid var(--line);
+  scroll-margin-top: 70px;
+}
+.st-section:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+.st-head h2 {
+  font-size: 15px;
+  font-weight: 640;
+}
+.st-head p {
+  font-size: 13px;
+  color: var(--text-3);
+  margin-top: 6px;
+}
+.st-body {
+  padding: 4px 18px;
+}
+.st-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.st-row:last-child {
+  border-bottom: 0;
+}
+.st-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.st-row-text b {
+  font-size: 14.5px;
+  font-weight: 560;
+}
+.st-row-text small {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.st-row-ctl {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.st-row-ctl .select {
+  width: auto;
+  min-width: 150px;
+}
+.st-row-ctl > .input {
+  width: 240px;
+}
+.small-input.input {
+  width: 110px;
+}
+.time-input.input {
+  width: 150px;
+}
+.key-input {
+  display: flex;
+  gap: 4px;
+  width: 280px;
+}
+.key-input .input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+.st-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 14px 0;
+}
+.swatches {
+  display: flex;
+  gap: 10px;
+}
+.swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 2px var(--bg) inset;
+  transition: transform 0.15s;
+}
+.swatch:hover {
+  transform: scale(1.1);
+}
+.swatch.on {
+  border-color: var(--text);
+}
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 20px;
+  padding: 16px 0;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+.shortcut-grid div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.shortcut-grid .kbd {
+  min-width: 52px;
+}
+.st-foot {
+  margin-top: 16px;
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .st-section {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .st-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .st-row-ctl {
+    flex-wrap: wrap;
+  }
+  .st-row-ctl > .input,
+  .key-input {
+    width: 100%;
+  }
+  .shortcut-grid {
+    grid-template-columns: 1fr;
+  }
+}
