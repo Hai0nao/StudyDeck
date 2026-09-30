@@ -1,16 +1,57 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { mergeData, readLegacyLocalStorage } from "@/lib/backup";
+import { mergeData, normalizeData, readLegacyLocalStorage } from "@/lib/backup";
 import { uid } from "@/lib/id";
 import { isDue, isNew, newSrs, Rating, review, type Grade } from "@/lib/srs";
 import { dayKey } from "@/lib/time";
 import { DEFAULT_SETTINGS, makeCard, makeSet } from "./defaults";
-import type { AppData, Card, DayStat, Folder, LearnLevel, Settings, StudySet } from "./types";
+import type {
+  AppData,
+  Card,
+  DayStat,
+  Folder,
+  LearnLevel,
+  Settings,
+  StudySet,
+  SyncMeta,
+  Tombstone,
+} from "./types";
 
 export interface CardDraft {
   id?: string;
   term: string;
   def: string;
+}
+
+/** Settings that follow you across devices. API keys and reminder state stay local. */
+export type SyncedSettings = Pick<
+  Settings,
+  "accent" | "srs" | "speech" | "lenient" | "learnRoundSize"
+> & { ai: Pick<Settings["ai"], "provider" | "models"> };
+
+export function pickSyncedSettings(s: Settings): SyncedSettings {
+  return {
+    accent: s.accent,
+    srs: s.srs,
+    speech: s.speech,
+    lenient: s.lenient,
+    learnRoundSize: s.learnRoundSize,
+    ai: { provider: s.ai.provider, models: s.ai.models },
+  };
+}
+
+/** Rows pulled from the server, already decoded. */
+export interface RemoteChanges {
+  folders: { id: string; data: Folder | null; modifiedAt: number; deleted: boolean }[];
+  sets: {
+    id: string;
+    data: (Omit<StudySet, "cards"> & { cardIds: string[] }) | null;
+    modifiedAt: number;
+    deleted: boolean;
+  }[];
+  cards: { id: string; setId: string; data: Card | null; modifiedAt: number; deleted: boolean }[];
+  days: { deviceId: string; day: string; stat: DayStat }[];
+  settings: { data: SyncedSettings; modifiedAt: number } | null;
 }
 
 interface Actions {
@@ -41,9 +82,15 @@ interface Actions {
   updateSettings(patch: Partial<Settings>): void;
   replaceAll(data: AppData): void;
   mergeIn(data: AppData): void;
+
+  /** Merge rows pulled from the cloud (newest copy wins). */
+  applyRemote(changes: RemoteChanges, ownDeviceId: string): void;
+  /** Forget local change markers that were uploaded and haven't changed since. */
+  markPushed(pushed: Record<string, number>): void;
+  requestFullPush(): void;
 }
 
-export type StoreState = AppData & { settings: Settings } & Actions;
+export type StoreState = AppData & { settings: Settings } & SyncMeta & Actions;
 
 function bumpDay(days: Record<string, DayStat>, patch: Partial<DayStat>) {
   const k = dayKey();
@@ -73,58 +120,152 @@ function descendants(folders: Folder[], id: string): Set<string> {
   return out;
 }
 
+const EMPTY_SYNC: SyncMeta = {
+  dirty: {},
+  tombstones: {},
+  needsFullPush: true,
+  remoteDays: {},
+  settingsModifiedAt: 0,
+};
+
 export const useStore = create<StoreState>()(
   persist(
     (set, get) => {
-      const mapSet = (id: string, fn: (s: StudySet) => StudySet) =>
-        set((st) => ({ sets: st.sets.map((s) => (s.id === id ? fn(s) : s)) }));
-      const mapCard = (setId: string, cardId: string, fn: (c: Card) => Card) =>
-        mapSet(setId, (s) => ({ ...s, cards: s.cards.map((c) => (c.id === cardId ? fn(c) : c)) }));
       const srsOpts = () => get().settings.srs;
+
+      /** Record local changes so the next sync uploads them. */
+      const dirty = (st: StoreState, keys: string[], at: number) => {
+        const d = { ...st.dirty };
+        for (const k of keys) d[k] = at;
+        return d;
+      };
+      const bury = (st: StoreState, entries: [string, Tombstone][]) => {
+        const t = { ...st.tombstones };
+        for (const [k, v] of entries) t[k] = v;
+        return t;
+      };
+
+      /** Change a set's own fields (title, folder, card order…). */
+      const mapSet = (id: string, fn: (s: StudySet) => StudySet) => {
+        const now = Date.now();
+        set((st) => ({
+          sets: st.sets.map((s) => (s.id === id ? { ...fn(s), modifiedAt: now } : s)),
+          dirty: dirty(st, [`set:${id}`], now),
+        }));
+      };
+      /** Change some cards of a set without touching the set itself. */
+      const mapCards = (setId: string, ids: Set<string> | null, fn: (c: Card) => Card) => {
+        const now = Date.now();
+        set((st) => {
+          const changed: string[] = [];
+          const sets = st.sets.map((s) =>
+            s.id !== setId
+              ? s
+              : {
+                  ...s,
+                  cards: s.cards.map((c) => {
+                    if (ids && !ids.has(c.id)) return c;
+                    changed.push(`card:${c.id}`);
+                    return { ...fn(c), modifiedAt: now };
+                  }),
+                },
+          );
+          return { sets, dirty: dirty(st, changed, now) };
+        });
+      };
+      const mapCard = (setId: string, cardId: string, fn: (c: Card) => Card) =>
+        mapCards(setId, new Set([cardId]), fn);
+
+      const newSetWithCards = (s: StudySet) =>
+        set((st) => ({
+          sets: [s, ...st.sets],
+          dirty: dirty(st, [`set:${s.id}`, ...s.cards.map((c) => `card:${c.id}`)], s.modifiedAt),
+        }));
 
       return {
         sets: [],
         folders: [],
         days: {},
         settings: DEFAULT_SETTINGS,
+        ...EMPTY_SYNC,
 
         createSet(data, cards) {
           const s = makeSet({
             ...data,
             cards: cards.map((c) => makeCard(c.term.trim(), c.def.trim())),
           });
-          set((st) => ({ sets: [s, ...st.sets] }));
+          newSetWithCards(s);
           return s.id;
         },
         updateSet(id, patch) {
           mapSet(id, (s) => ({ ...s, ...patch, updatedAt: Date.now() }));
         },
         saveCards(id, drafts) {
-          mapSet(id, (s) => {
+          const now = Date.now();
+          set((st) => {
+            const s = st.sets.find((x) => x.id === id);
+            if (!s) return {};
             const old = new Map(s.cards.map((c) => [c.id, c]));
+            const touched: string[] = [];
             const cards = drafts.map((d) => {
               const prev = d.id ? old.get(d.id) : undefined;
               const term = d.term.trim();
               const def = d.def.trim();
-              if (!prev) return makeCard(term, def);
+              if (!prev) {
+                const c = makeCard(term, def, now);
+                touched.push(`card:${c.id}`);
+                return c;
+              }
+              if (prev.term === term && prev.def === def) return prev;
+              touched.push(`card:${prev.id}`);
               // Both sides rewritten → effectively a new fact, so its progress starts over.
               const rewritten = prev.term !== term && prev.def !== def;
               return rewritten
-                ? { ...prev, term, def, learn: 0 as const, srs: newSrs() }
-                : { ...prev, term, def };
+                ? { ...prev, term, def, learn: 0 as const, srs: newSrs(now), modifiedAt: now }
+                : { ...prev, term, def, modifiedAt: now };
             });
-            return { ...s, cards, updatedAt: Date.now() };
+            const kept = new Set(cards.map((c) => c.id));
+            const removed = s.cards.filter((c) => !kept.has(c.id));
+            return {
+              sets: st.sets.map((x) =>
+                x.id === id ? { ...x, cards, updatedAt: now, modifiedAt: now } : x,
+              ),
+              dirty: dirty(st, [`set:${id}`, ...touched], now),
+              tombstones: bury(
+                st,
+                removed.map((c) => [`card:${c.id}`, { at: now, setId: id }]),
+              ),
+            };
           });
         },
         appendCards(id, drafts) {
-          mapSet(id, (s) => ({
-            ...s,
-            cards: [...s.cards, ...drafts.map((d) => makeCard(d.term.trim(), d.def.trim()))],
-            updatedAt: Date.now(),
+          const now = Date.now();
+          const added = drafts.map((d) => makeCard(d.term.trim(), d.def.trim(), now));
+          set((st) => ({
+            sets: st.sets.map((s) =>
+              s.id === id
+                ? { ...s, cards: [...s.cards, ...added], updatedAt: now, modifiedAt: now }
+                : s,
+            ),
+            dirty: dirty(st, [`set:${id}`, ...added.map((c) => `card:${c.id}`)], now),
           }));
         },
         deleteSet(id) {
-          set((st) => ({ sets: st.sets.filter((s) => s.id !== id) }));
+          const now = Date.now();
+          set((st) => {
+            const s = st.sets.find((x) => x.id === id);
+            if (!s) return {};
+            return {
+              sets: st.sets.filter((x) => x.id !== id),
+              tombstones: bury(st, [
+                [`set:${id}`, { at: now }],
+                ...s.cards.map((c): [string, Tombstone] => [
+                  `card:${c.id}`,
+                  { at: now, setId: id },
+                ]),
+              ]),
+            };
+          });
         },
         duplicateSet(id) {
           const src = get().sets.find((s) => s.id === id);
@@ -137,21 +278,18 @@ export const useStore = create<StoreState>()(
             defLang: src.defLang,
             cards: src.cards.map((c) => ({ ...makeCard(c.term, c.def), star: c.star })),
           });
-          set((st) => ({ sets: [copy, ...st.sets] }));
+          newSetWithCards(copy);
           return copy.id;
         },
         resetProgress(id) {
-          mapSet(id, (s) => ({
-            ...s,
-            matchBest: null,
-            cards: s.cards.map((c) => ({
-              ...c,
-              learn: 0,
-              srs: newSrs(),
-              seen: 0,
-              correct: 0,
-              wrong: 0,
-            })),
+          mapSet(id, (s) => ({ ...s, matchBest: null }));
+          mapCards(id, null, (c) => ({
+            ...c,
+            learn: 0,
+            srs: newSrs(),
+            seen: 0,
+            correct: 0,
+            wrong: 0,
           }));
         },
         markStudied(id) {
@@ -159,36 +297,55 @@ export const useStore = create<StoreState>()(
         },
 
         createFolder(name, parentId) {
+          const now = Date.now();
           const f: Folder = {
             id: uid(),
             name: name.trim() || "New folder",
             parentId,
-            createdAt: Date.now(),
+            createdAt: now,
+            modifiedAt: now,
           };
-          set((st) => ({ folders: [...st.folders, f] }));
+          set((st) => ({ folders: [...st.folders, f], dirty: dirty(st, [`folder:${f.id}`], now) }));
           return f.id;
         },
         renameFolder(id, name) {
+          const now = Date.now();
           set((st) => ({
             folders: st.folders.map((f) =>
-              f.id === id ? { ...f, name: name.trim() || f.name } : f,
+              f.id === id ? { ...f, name: name.trim() || f.name, modifiedAt: now } : f,
             ),
+            dirty: dirty(st, [`folder:${id}`], now),
           }));
         },
         moveFolder(id, parentId) {
           // Refuse to move a folder inside itself or one of its children.
           if (parentId && descendants(get().folders, id).has(parentId)) return;
-          set((st) => ({ folders: st.folders.map((f) => (f.id === id ? { ...f, parentId } : f)) }));
+          const now = Date.now();
+          set((st) => ({
+            folders: st.folders.map((f) => (f.id === id ? { ...f, parentId, modifiedAt: now } : f)),
+            dirty: dirty(st, [`folder:${id}`], now),
+          }));
         },
         deleteFolder(id) {
           // Sets inside are kept and moved up to the deleted folder's parent.
+          const now = Date.now();
           const st = get();
           const gone = descendants(st.folders, id);
           const parent = st.folders.find((f) => f.id === id)?.parentId ?? null;
+          const moved = st.sets.filter((s) => s.folderId && gone.has(s.folderId));
           set({
             folders: st.folders.filter((f) => !gone.has(f.id)),
             sets: st.sets.map((s) =>
-              s.folderId && gone.has(s.folderId) ? { ...s, folderId: parent } : s,
+              s.folderId && gone.has(s.folderId) ? { ...s, folderId: parent, modifiedAt: now } : s,
+            ),
+            dirty: dirty(
+              st,
+              moved.map((s) => `set:${s.id}`),
+              now,
+            ),
+            tombstones: bury(
+              st,
+              [...gone].map((fid) => [`folder:${fid}`, { at: now }]),
             ),
           });
         },
@@ -242,11 +399,7 @@ export const useStore = create<StoreState>()(
           mapCard(setId, cardId, (c) => ({ ...c, learn: level }));
         },
         resetLearn(setId, cardIds) {
-          const only = cardIds ? new Set(cardIds) : null;
-          mapSet(setId, (s) => ({
-            ...s,
-            cards: s.cards.map((c) => (!only || only.has(c.id) ? { ...c, learn: 0 } : c)),
-          }));
+          mapCards(setId, cardIds ? new Set(cardIds) : null, (c) => ({ ...c, learn: 0 }));
         },
         setMatchBest(setId, ms) {
           mapSet(setId, (s) => ({
@@ -256,22 +409,201 @@ export const useStore = create<StoreState>()(
         },
 
         updateSettings(patch) {
-          set((st) => ({ settings: { ...st.settings, ...patch } }));
+          const now = Date.now();
+          set((st) => {
+            const settings = { ...st.settings, ...patch };
+            // Only mark for upload when something that syncs actually changed.
+            const synced =
+              JSON.stringify(pickSyncedSettings(settings)) !==
+              JSON.stringify(pickSyncedSettings(st.settings));
+            return synced
+              ? { settings, settingsModifiedAt: now, dirty: dirty(st, ["settings"], now) }
+              : { settings };
+          });
         },
         replaceAll(data) {
-          set({ sets: data.sets, folders: data.folders, days: data.days });
+          const now = Date.now();
+          set((st) => {
+            const next = stamp(normalizeData(data), now);
+            // Everything that disappears must also disappear on other devices.
+            const keep = new Set([
+              ...next.sets.map((s) => `set:${s.id}`),
+              ...next.sets.flatMap((s) => s.cards.map((c) => `card:${c.id}`)),
+              ...next.folders.map((f) => `folder:${f.id}`),
+            ]);
+            const gone: [string, Tombstone][] = [
+              ...st.sets.map((s): [string, Tombstone] => [`set:${s.id}`, { at: now }]),
+              ...st.sets.flatMap((s) =>
+                s.cards.map((c): [string, Tombstone] => [`card:${c.id}`, { at: now, setId: s.id }]),
+              ),
+              ...st.folders.map((f): [string, Tombstone] => [`folder:${f.id}`, { at: now }]),
+            ].filter(([k]) => !keep.has(k));
+            return {
+              ...next,
+              tombstones: bury(st, gone),
+              needsFullPush: true,
+            };
+          });
         },
         mergeIn(data) {
           const st = get();
-          set(mergeData({ sets: st.sets, folders: st.folders, days: st.days }, data));
+          const merged = mergeData(
+            { sets: st.sets, folders: st.folders, days: st.days },
+            stamp(normalizeData(data), Date.now()),
+          );
+          set({ ...merged, needsFullPush: true });
+        },
+
+        applyRemote(changes, ownDeviceId) {
+          set((st) => {
+            const localNewer = (key: string, modifiedAt: number, local?: number) =>
+              (local ?? -1) > modifiedAt || (st.tombstones[key]?.at ?? -1) > modifiedAt;
+
+            // folders
+            const folders = new Map(st.folders.map((f) => [f.id, f]));
+            for (const r of changes.folders) {
+              const local = folders.get(r.id);
+              if (localNewer(`folder:${r.id}`, r.modifiedAt, local?.modifiedAt)) continue;
+              if (local?.modifiedAt === r.modifiedAt && !r.deleted) continue;
+              if (r.deleted || !r.data) folders.delete(r.id);
+              else folders.set(r.id, { ...r.data, modifiedAt: r.modifiedAt });
+            }
+
+            // sets (cards are kept; they arrive as their own rows)
+            const sets = new Map(st.sets.map((s) => [s.id, s]));
+            const order = new Map<string, string[]>();
+            for (const r of changes.sets) {
+              const local = sets.get(r.id);
+              if (localNewer(`set:${r.id}`, r.modifiedAt, local?.modifiedAt)) continue;
+              if (local?.modifiedAt === r.modifiedAt && !r.deleted) continue;
+              if (r.deleted || !r.data) {
+                sets.delete(r.id);
+                continue;
+              }
+              const { cardIds, ...meta } = r.data;
+              sets.set(r.id, { ...meta, cards: local?.cards ?? [], modifiedAt: r.modifiedAt });
+              order.set(r.id, cardIds ?? []);
+            }
+
+            // cards — work on copied arrays, copied once per touched set
+            const where = new Map<string, string>(); // cardId → setId
+            for (const s of sets.values()) for (const c of s.cards) where.set(c.id, s.id);
+            const working = new Map<string, Card[]>();
+            const cardsOf = (setId: string) => {
+              let list = working.get(setId);
+              if (!list) {
+                list = [...(sets.get(setId)?.cards ?? [])];
+                working.set(setId, list);
+              }
+              return list;
+            };
+            for (const r of changes.cards) {
+              const ownerId = where.get(r.id);
+              const ownerCards = ownerId ? cardsOf(ownerId) : undefined;
+              const idx = ownerCards ? ownerCards.findIndex((c) => c.id === r.id) : -1;
+              const local = idx >= 0 ? ownerCards![idx] : undefined;
+              if (localNewer(`card:${r.id}`, r.modifiedAt, local?.modifiedAt)) continue;
+              if (local?.modifiedAt === r.modifiedAt && !r.deleted) continue;
+              const card = r.data ? { ...r.data, id: r.id, modifiedAt: r.modifiedAt } : null;
+              if (!r.deleted && card && ownerId === r.setId && idx >= 0) {
+                ownerCards![idx] = card; // updated in place, keeps its position
+                continue;
+              }
+              if (ownerCards && idx >= 0) {
+                ownerCards.splice(idx, 1);
+                where.delete(r.id);
+              }
+              if (r.deleted || !card || !sets.has(r.setId)) continue; // gone, or its set was deleted
+              cardsOf(r.setId).push(card);
+              where.set(r.id, r.setId);
+            }
+            for (const id of new Set([...working.keys(), ...order.keys()])) {
+              const s = sets.get(id);
+              if (!s) continue;
+              let cards = working.get(id) ?? s.cards;
+              const ids = order.get(id);
+              if (ids?.length) {
+                const pos = new Map(ids.map((cid, i) => [cid, i]));
+                cards = [...cards].sort((a, b) => (pos.get(a.id) ?? 1e9) - (pos.get(b.id) ?? 1e9));
+              }
+              sets.set(id, { ...s, cards });
+            }
+
+            // stats from other devices
+            const remoteDays = { ...st.remoteDays };
+            for (const d of changes.days) {
+              if (d.deviceId === ownDeviceId) continue;
+              remoteDays[d.deviceId] = { ...remoteDays[d.deviceId], [d.day]: d.stat };
+            }
+
+            // settings
+            let settings = st.settings;
+            let settingsModifiedAt = st.settingsModifiedAt;
+            if (changes.settings && changes.settings.modifiedAt > st.settingsModifiedAt) {
+              const r = changes.settings.data;
+              settings = {
+                ...settings,
+                ...r,
+                srs: { ...settings.srs, ...r.srs },
+                speech: { ...settings.speech, ...r.speech },
+                ai: {
+                  ...settings.ai,
+                  provider: r.ai?.provider ?? settings.ai.provider,
+                  models: { ...settings.ai.models, ...r.ai?.models },
+                },
+              };
+              settingsModifiedAt = changes.settings.modifiedAt;
+            }
+
+            // keep the local ordering of sets; new ones go first
+            const known = new Set(st.sets.map((s) => s.id));
+            const orderedSets = [
+              ...[...sets.values()].filter((s) => !known.has(s.id)),
+              ...st.sets.filter((s) => sets.has(s.id)).map((s) => sets.get(s.id)!),
+            ];
+            return {
+              folders: [...folders.values()],
+              sets: orderedSets,
+              remoteDays,
+              settings,
+              settingsModifiedAt,
+            };
+          });
+        },
+        markPushed(pushed) {
+          set((st) => {
+            const d = { ...st.dirty };
+            const t = { ...st.tombstones };
+            for (const [k, at] of Object.entries(pushed)) {
+              if (d[k] !== undefined && d[k] <= at) delete d[k];
+              if (t[k] && t[k].at <= at) delete t[k];
+            }
+            return { dirty: d, tombstones: t, needsFullPush: false };
+          });
+        },
+        requestFullPush() {
+          set({ needsFullPush: true });
         },
       };
     },
     {
       name: "studydeck.v3",
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ sets: s.sets, folders: s.folders, days: s.days, settings: s.settings }),
+      // Without this, zustand drops stored data whose version differs. Missing fields
+      // (e.g. modifiedAt before v2) are filled in by `merge` below.
+      migrate: (persisted) => persisted as StoreState,
+      partialize: (s) => ({
+        sets: s.sets,
+        folders: s.folders,
+        days: s.days,
+        settings: s.settings,
+        dirty: s.dirty,
+        tombstones: s.tombstones,
+        needsFullPush: s.needsFullPush,
+        remoteDays: s.remoteDays,
+        settingsModifiedAt: s.settingsModifiedAt,
+      }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<StoreState>;
         const settings: Settings = {
@@ -287,7 +619,14 @@ export const useStore = create<StoreState>()(
           reminder: { ...DEFAULT_SETTINGS.reminder, ...p.settings?.reminder },
           speech: { ...DEFAULT_SETTINGS.speech, ...p.settings?.speech },
         };
-        if (persisted) return { ...current, ...p, settings };
+        if (persisted) {
+          const data = normalizeData({
+            sets: p.sets ?? [],
+            folders: p.folders ?? [],
+            days: p.days ?? {},
+          });
+          return { ...current, ...EMPTY_SYNC, ...p, ...data, settings };
+        }
         // First launch on an origin that still has StudyDeck 2 data: bring it over.
         const legacy = readLegacyLocalStorage();
         return legacy ? { ...current, ...legacy, settings } : { ...current, settings };
@@ -296,10 +635,44 @@ export const useStore = create<StoreState>()(
   ),
 );
 
+/** Mark imported data as changed now so it wins over older copies on other devices. */
+function stamp(data: AppData, now: number): AppData {
+  return {
+    days: data.days,
+    folders: data.folders.map((f) => ({ ...f, modifiedAt: now })),
+    sets: data.sets.map((s) => ({
+      ...s,
+      modifiedAt: now,
+      cards: s.cards.map((c) => ({ ...c, modifiedAt: now })),
+    })),
+  };
+}
+
 /* ---------- selectors / helpers (pure) ---------- */
 
 export const findSet = (sets: StudySet[], id: string | undefined) =>
   id ? sets.find((s) => s.id === id) : undefined;
+
+/** This device's stats plus everything other signed-in devices reported. */
+export function combinedDays(
+  days: Record<string, DayStat>,
+  remoteDays: Record<string, Record<string, DayStat>>,
+): Record<string, DayStat> {
+  const devices = Object.values(remoteDays);
+  if (!devices.length) return days;
+  const out: Record<string, DayStat> = { ...days };
+  for (const dev of devices) {
+    for (const [k, v] of Object.entries(dev)) {
+      const d = out[k] ?? { answers: 0, correct: 0, newCards: 0 };
+      out[k] = {
+        answers: d.answers + v.answers,
+        correct: d.correct + v.correct,
+        newCards: d.newCards + v.newCards,
+      };
+    }
+  }
+  return out;
+}
 
 export function setMastery(s: StudySet) {
   let fresh = 0,
@@ -317,8 +690,11 @@ export function dueCount(s: StudySet, now = Date.now()) {
   return s.cards.filter((c) => isDue(c, now)).length;
 }
 
-export function newRemainingToday(st: Pick<StoreState, "days" | "settings">) {
-  const used = st.days[dayKey()]?.newCards ?? 0;
+export function newRemainingToday(
+  st: Pick<StoreState, "days" | "settings"> & Partial<Pick<StoreState, "remoteDays">>,
+) {
+  const days = combinedDays(st.days, st.remoteDays ?? {});
+  const used = days[dayKey()]?.newCards ?? 0;
   return Math.max(0, st.settings.srs.newPerDay - used);
 }
 

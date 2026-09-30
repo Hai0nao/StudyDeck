@@ -53,6 +53,9 @@ npm run dev
 Open http://localhost:5173. Add `?demo` to the URL in development to load sample data
 (this replaces whatever is stored locally).
 
+For cloud sync in development, copy `.env.example` to `.env.local` and fill in the Supabase
+project URL and publishable key. Without them the app runs local-only and hides sync.
+
 | Script            | What it does                                   |
 | ----------------- | ---------------------------------------------- |
 | `npm run dev`     | Start the dev server                           |
@@ -69,6 +72,10 @@ The app is hosted on Netlify at https://flashcardhaiii.netlify.app. Build settin
 `netlify.toml` (`npm run build` → `dist/`), so once the GitHub repo is linked to the Netlify
 project (**Project configuration → Build & deploy → Link repository**), every push to `main`
 deploys automatically and pull requests get preview URLs.
+
+The build needs two environment variables for cloud sync, set in Netlify under
+**Project configuration → Environment variables**: `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_PUBLISHABLE_KEY`.
 
 GitHub Actions (`ci.yml`) runs lint, tests and a build on every push and pull request.
 
@@ -100,6 +107,29 @@ A static site can't wake itself up on a schedule, so StudyDeck combines three th
 3. **Calendar event** (`.ics`, daily repeat) — import it into Google Calendar / Apple Calendar /
    Outlook for a reminder that arrives even when the browser is closed.
 
+## Cloud sync (Supabase)
+
+Sign in under **Settings → Cloud sync** on each device to share one library between your
+computer and phone. The app stays local-first: everything is saved in the browser and works
+offline; when online it pulls changes from other devices, then pushes its own — on start-up,
+a few seconds after each edit, when the tab regains focus and every five minutes.
+
+- Each set, card and folder is a row; when two devices change the same item, the most recent
+  edit wins. Deletions are synced too.
+- Daily stats are stored per device and added together, so studying on two devices the same
+  day never loses counts.
+- Study settings sync; AI API keys and reminder settings stay on each device.
+- Row-level security limits every account to its own rows. The schema lives in
+  [`supabase/migrations`](supabase/migrations).
+
+One-time Supabase setup (Dashboard → **Authentication → URL Configuration**): set **Site URL**
+to the production URL and add `http://localhost:5173/**` to **Redirect URLs**, so the link in
+the sign-up confirmation email opens the app. For a personal project you can instead turn off
+**Confirm email** under **Authentication → Sign In / Providers → Email**.
+
+Free Supabase projects pause after a week without activity; resume it from the dashboard if
+sync starts failing after a long break.
+
 ## Data & backups
 
 All sets, progress and settings live in `localStorage` under `studydeck.v3`. Use
@@ -120,18 +150,21 @@ src/
     reminders.ts    notifications, app badge, .ics
     ai/             prompts + Claude / OpenAI / Gemini clients (lazy-loaded)
   store/          Zustand store (persisted), selectors, UI state
+  sync/           Supabase auth + pull/push sync engine
+supabase/
+  migrations/     database schema, RLS policies and the push_changes() function
   components/     layout, dialogs, command palette, shared UI
   features/       pages: home, library, sets, editor, study modes, settings, ai
   styles/         design tokens and global CSS
 ```
 
-Tech: React 19, TypeScript, Vite, React Router (hash mode), Zustand, ts-fsrs, Anthropic SDK,
-vite-plugin-pwa, Vitest.
+Tech: React 19, TypeScript, Vite, React Router (hash mode), Zustand, ts-fsrs, Supabase,
+Anthropic SDK, vite-plugin-pwa, Vitest.
 
 ## Roadmap ideas
 
 - Images on cards
-- Cloud sync between devices (e.g. Supabase) instead of manual backups
+- Password reset and Google sign-in for sync
 - Blocks-style game and a “Spell” audio mode
 - Per-card AI explanations and example sentences
 

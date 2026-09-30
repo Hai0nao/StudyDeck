@@ -1,7 +1,7 @@
 import { ArrowRight, Flame, Layers, Plus, RotateCcw, Sparkles, Upload } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
-import { useReviewCounts } from "@/store/useReviewCounts";
+import { useAllDays, useReviewCounts } from "@/store/useReviewCounts";
 import { SetCard } from "@/components/SetCard";
 import { useNow } from "@/lib/hooks";
 import { DAY, dayKey, startOfDay } from "@/lib/time";
@@ -17,7 +17,7 @@ function greeting(now: number) {
 export function HomePage() {
   const sets = useStore((s) => s.sets);
   const folders = useStore((s) => s.folders);
-  const days = useStore((s) => s.days);
+  const days = useAllDays();
   const now = useNow();
   const counts = useReviewCounts();
   const today = days[dayKey(now)] ?? { answers: 0, correct: 0, newCards: 0 };

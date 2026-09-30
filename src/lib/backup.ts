@@ -60,6 +60,7 @@ export function convertLegacy(raw: LegacyData, now = Date.now()): AppData {
     name: f.name || "Folder",
     parentId: f.parent ?? null,
     createdAt: f.created ?? now,
+    modifiedAt: now,
   }));
   const folderIds = new Set(folders.map((f) => f.id));
   for (const f of folders) if (f.parentId && !folderIds.has(f.parentId)) f.parentId = null;
@@ -107,12 +108,25 @@ export function readLegacyLocalStorage(): AppData | null {
   }
 }
 
+/** Fill fields added after the data was written (e.g. modifiedAt from before cloud sync). */
+export function normalizeData(data: AppData): AppData {
+  return {
+    days: data.days ?? {},
+    folders: data.folders.map((f) => ({ ...f, modifiedAt: f.modifiedAt ?? f.createdAt ?? 0 })),
+    sets: data.sets.map((s) => ({
+      ...s,
+      modifiedAt: s.modifiedAt ?? s.updatedAt ?? 0,
+      cards: s.cards.map((c) => ({ ...c, modifiedAt: c.modifiedAt ?? c.createdAt ?? 0 })),
+    })),
+  };
+}
+
 /** Accept a StudyDeck 3 backup or a StudyDeck 2 "studydeck-backup.json". */
 export function parseBackup(json: string): AppData {
   const data = JSON.parse(json);
   if (!data || typeof data !== "object") throw new Error("This file is not a StudyDeck backup.");
   if (data.app === "studydeck" && Array.isArray(data.sets)) {
-    return { sets: data.sets, folders: data.folders ?? [], days: data.days ?? {} };
+    return normalizeData({ sets: data.sets, folders: data.folders ?? [], days: data.days ?? {} });
   }
   if (Array.isArray(data.sets)) return convertLegacy(data);
   throw new Error("This file is not a StudyDeck backup.");

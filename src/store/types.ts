@@ -27,6 +27,8 @@ export interface Card {
   correct: number;
   wrong: number;
   createdAt: number;
+  /** last local or synced change (epoch ms) — decides which copy wins when syncing */
+  modifiedAt: number;
 }
 
 export interface StudySet {
@@ -42,6 +44,7 @@ export interface StudySet {
   updatedAt: number;
   studiedAt: number | null;
   matchBest: number | null;
+  modifiedAt: number;
 }
 
 export interface Folder {
@@ -49,6 +52,7 @@ export interface Folder {
   name: string;
   parentId: string | null;
   createdAt: number;
+  modifiedAt: number;
 }
 
 export interface DayStat {
@@ -91,4 +95,22 @@ export interface AppData {
   sets: StudySet[];
   folders: Folder[];
   days: Record<string, DayStat>;
+}
+
+/** Deleted entity waiting to be pushed, keyed "set:<id>", "card:<id>" or "folder:<id>". */
+export interface Tombstone {
+  at: number;
+  setId?: string;
+}
+
+/** Book-keeping for cloud sync, persisted with the rest of the data. */
+export interface SyncMeta {
+  /** entities changed locally since the last push, keyed like tombstones (+ "settings") */
+  dirty: Record<string, number>;
+  tombstones: Record<string, Tombstone>;
+  /** set when everything must be uploaded (first sign-in, restore, import) */
+  needsFullPush: boolean;
+  /** daily stats reported by other devices: deviceId → day → stat */
+  remoteDays: Record<string, Record<string, DayStat>>;
+  settingsModifiedAt: number;
 }

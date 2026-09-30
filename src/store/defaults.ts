@@ -29,6 +29,7 @@ export function makeCard(term = "", def = "", now = Date.now()): Card {
     correct: 0,
     wrong: 0,
     createdAt: now,
+    modifiedAt: now,
   };
 }
 
@@ -46,6 +47,7 @@ export function makeSet(partial: Partial<StudySet> = {}): StudySet {
     updatedAt: now,
     studiedAt: null,
     matchBest: null,
+    modifiedAt: now,
     ...partial,
   };
 }

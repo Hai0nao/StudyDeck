@@ -191,6 +191,31 @@
   margin-top: auto;
   padding-top: 14px;
 }
+.sync-ind {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 2px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.sync-ind:hover {
+  color: var(--text-2);
+  background: var(--surface);
+}
+.sync-ind svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+.sync-ind.idle svg {
+  color: var(--good);
+}
+.sync-ind.error {
+  color: var(--again);
+}
 
 .main {
   flex: 1;

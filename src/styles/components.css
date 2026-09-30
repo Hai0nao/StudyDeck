@@ -393,6 +393,9 @@
     transform: rotate(360deg);
   }
 }
+svg.spin {
+  animation: spin 1s linear infinite;
+}
 
 /* ---------- modal ---------- */
 .veil {

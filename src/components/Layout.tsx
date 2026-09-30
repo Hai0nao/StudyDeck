@@ -14,6 +14,7 @@ import {
 import { useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { useReviewCounts } from "@/store/useReviewCounts";
+import { SyncIndicator } from "./SyncIndicator";
 import { useStore } from "@/store/useStore";
 import { openAi, openFolderDialog, openPalette } from "@/store/ui";
 import type { Folder } from "@/store/types";
@@ -148,6 +149,7 @@ export function Layout() {
         <FolderTree />
 
         <div className="side-foot">
+          <SyncIndicator />
           <NavLink to="/settings" className="nav-link">
             <SettingsIcon />
             Settings

@@ -23,6 +23,7 @@ import {
 } from "@/lib/reminders";
 import { useStore } from "@/store/useStore";
 import type { Accent, AppData, Provider, Settings } from "@/store/types";
+import { SyncSection } from "./SyncSection";
 import "./settings.css";
 
 const ACCENTS: { id: Accent; color: string; label: string }[] = [
@@ -142,6 +143,10 @@ export function SettingsPage() {
           <p>Everything is stored in this browser. Back up regularly.</p>
         </div>
       </div>
+
+      <Section id="sync" title="Cloud sync" desc="Use the same library on your computer and phone.">
+        <SyncSection />
+      </Section>
 
       <Section title="Appearance">
         <Row title="Accent colour">
