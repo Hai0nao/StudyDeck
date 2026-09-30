@@ -63,18 +63,17 @@ Open http://localhost:5173. Add `?demo` to the URL in development to load sample
 | `npm run format`  | Prettier                                       |
 | `npm run icons`   | Regenerate PWA icons from `public/favicon.svg` |
 
-## Deploying to GitHub Pages
+## Deploying
 
-The repo ships with two workflows:
+The app is hosted on Netlify at https://flashcardhaiii.netlify.app. Build settings live in
+`netlify.toml` (`npm run build` → `dist/`), so once the GitHub repo is linked to the Netlify
+project (**Project configuration → Build & deploy → Link repository**), every push to `main`
+deploys automatically and pull requests get preview URLs.
 
-- `ci.yml` — lint, type-check, test and build on every push and pull request.
-- `deploy.yml` — builds and publishes `dist/` to GitHub Pages on every push to `main`.
+GitHub Actions (`ci.yml`) runs lint, tests and a build on every push and pull request.
 
-One-time setup: in the GitHub repository go to **Settings → Pages → Build and deployment** and set
-**Source** to **GitHub Actions**. The site appears at `https://<user>.github.io/<repo>/`.
-
-The build uses a relative base path and hash routing, so the same `dist/` also works on Netlify,
-Vercel, Cloudflare Pages or any static host without changes.
+The build uses a relative base path and hash routing, so the same `dist/` also works on Vercel,
+Cloudflare Pages, GitHub Pages or any static host without changes.
 
 ## AI import
 
