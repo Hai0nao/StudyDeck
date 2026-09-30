@@ -32,6 +32,12 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 export async function signIn(email: string, password: string) {
   const sb = await getClient();
   const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
+  if (error?.code === "invalid_credentials") {
+    throw new Error("Wrong email or password. New here? Press “Create account” first.");
+  }
+  if (error?.code === "email_not_confirmed") {
+    throw new Error("Confirm your email first — check your inbox for the link from Supabase.");
+  }
   if (error) throw new Error(error.message);
 }
 
