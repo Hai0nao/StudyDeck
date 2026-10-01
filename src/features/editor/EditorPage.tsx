@@ -9,9 +9,11 @@ import {
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { ImageSlot } from "@/components/CardImage";
 import { FolderSelect } from "@/components/FolderPicker";
 import { toast } from "@/components/toast";
 import { uid } from "@/lib/id";
+import { addImage, imageFromTransfer } from "@/lib/images";
 import type { RawCard } from "@/lib/parse";
 import { SPEECH_LANGS } from "@/lib/speech";
 import { useStore } from "@/store/useStore";
@@ -24,10 +26,19 @@ interface Row {
   id?: string;
   term: string;
   def: string;
+  termImage: string | null;
+  defImage: string | null;
 }
 
-const blank = (): Row => ({ key: uid(), term: "", def: "" });
-const isBlank = (r: Row) => !r.term.trim() && !r.def.trim();
+const blank = (): Row => ({ key: uid(), term: "", def: "", termImage: null, defImage: null });
+const isBlank = (r: Row) => !r.term.trim() && !r.def.trim() && !r.termImage && !r.defImage;
+const swapRow = (r: Row): Row => ({
+  ...r,
+  term: r.def,
+  def: r.term,
+  termImage: r.defImage,
+  defImage: r.termImage,
+});
 
 function AutoTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -56,7 +67,14 @@ export function EditorPage() {
   const [defLang, setDefLang] = useState(existing?.defLang ?? "");
   const [rows, setRows] = useState<Row[]>(() =>
     existing?.cards.length
-      ? existing.cards.map((c) => ({ key: c.id, id: c.id, term: c.term, def: c.def }))
+      ? existing.cards.map((c) => ({
+          key: c.id,
+          id: c.id,
+          term: c.term,
+          def: c.def,
+          termImage: c.termImage ?? null,
+          defImage: c.defImage ?? null,
+        }))
       : [blank(), blank(), blank()],
   );
   const [showOptions, setShowOptions] = useState(false);
@@ -85,6 +103,24 @@ export function EditorPage() {
   };
   const setField = (key: string, field: "term" | "def", value: string) =>
     edit((rs) => rs.map((r) => (r.key === key ? { ...r, [field]: value } : r)));
+  const setImage = (key: string, field: "termImage" | "defImage", value: string | null) =>
+    edit((rs) => rs.map((r) => (r.key === key ? { ...r, [field]: value } : r)));
+
+  /** Ctrl+V an image while typing in a field puts it on that side of the card. */
+  const onPasteImage = async (
+    e: React.ClipboardEvent<HTMLTextAreaElement>,
+    key: string,
+    field: "termImage" | "defImage",
+  ) => {
+    const file = imageFromTransfer(e.clipboardData);
+    if (!file) return;
+    e.preventDefault();
+    try {
+      setImage(key, field, await addImage(file));
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't add that image");
+    }
+  };
 
   const addRow = (after?: string) => {
     const r = blank();
@@ -99,7 +135,7 @@ export function EditorPage() {
   const appendCards = (cards: RawCard[], aiTitle?: string) => {
     edit((rs) => [
       ...rs.filter((r) => !isBlank(r)),
-      ...cards.map((c) => ({ key: uid(), term: c.term, def: c.def })),
+      ...cards.map((c) => ({ ...blank(), term: c.term, def: c.def })),
     ]);
     if (!title.trim() && aiTitle) setTitle(aiTitle);
   };
@@ -260,7 +296,7 @@ export function EditorPage() {
         </button>
         <button
           className="btn btn-ghost btn-sm"
-          onClick={() => edit((rs) => rs.map((r) => ({ ...r, term: r.def, def: r.term })))}
+          onClick={() => edit((rs) => rs.map(swapRow))}
           title="Swap terms and definitions"
         >
           <ArrowLeftRight />
@@ -303,11 +339,7 @@ export function EditorPage() {
               <span style={{ flex: 1 }} />
               <button
                 className="icon-btn sm"
-                onClick={() =>
-                  edit((rs) =>
-                    rs.map((x) => (x.key === r.key ? { ...x, term: x.def, def: x.term } : x)),
-                  )
-                }
+                onClick={() => edit((rs) => rs.map((x) => (x.key === r.key ? swapRow(x) : x)))}
                 aria-label="Swap sides"
               >
                 <ArrowLeftRight />
@@ -323,24 +355,40 @@ export function EditorPage() {
               </button>
             </div>
             <div className="row-fields">
-              <label>
-                <AutoTextarea
-                  data-term={r.key}
-                  value={r.term}
-                  placeholder="Term"
-                  onChange={(e) => setField(r.key, "term", e.target.value)}
+              <div className="row-side">
+                <label>
+                  <AutoTextarea
+                    data-term={r.key}
+                    value={r.term}
+                    placeholder="Term"
+                    onChange={(e) => setField(r.key, "term", e.target.value)}
+                    onPaste={(e) => onPasteImage(e, r.key, "termImage")}
+                  />
+                  <span>Term</span>
+                </label>
+                <ImageSlot
+                  label="term"
+                  value={r.termImage}
+                  onChange={(v) => setImage(r.key, "termImage", v)}
                 />
-                <span>Term</span>
-              </label>
-              <label>
-                <AutoTextarea
-                  value={r.def}
-                  placeholder="Definition"
-                  onChange={(e) => setField(r.key, "def", e.target.value)}
-                  onKeyDown={(e) => onDefKey(e, i)}
+              </div>
+              <div className="row-side">
+                <label>
+                  <AutoTextarea
+                    value={r.def}
+                    placeholder="Definition"
+                    onChange={(e) => setField(r.key, "def", e.target.value)}
+                    onKeyDown={(e) => onDefKey(e, i)}
+                    onPaste={(e) => onPasteImage(e, r.key, "defImage")}
+                  />
+                  <span>Definition</span>
+                </label>
+                <ImageSlot
+                  label="definition"
+                  value={r.defImage}
+                  onChange={(v) => setImage(r.key, "defImage", v)}
                 />
-                <span>Definition</span>
-              </label>
+              </div>
             </div>
           </li>
         ))}

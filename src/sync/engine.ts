@@ -1,4 +1,5 @@
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
+import { setRemoteImageLoader } from "@/lib/images";
 import { dayKey } from "@/lib/time";
 import type { Folder } from "@/store/types";
 import { useStore } from "@/store/useStore";
@@ -14,6 +15,7 @@ import {
   type SetData,
   type SettingsRow,
 } from "./payload";
+import { cleanUpRemoteImages, downloadImage, markRemoteImages, uploadImages } from "./images";
 import { useSync } from "./syncState";
 
 const PAGE = 1000;
@@ -67,7 +69,14 @@ function onSession(session: Session | null) {
   }
   if (sync.userId !== user.id) {
     // Different account (or first sign-in): start over and upload everything local.
-    useSync.setState({ userId: user.id, cursor: null, lastPushAt: 0, lastSyncedAt: null });
+    useSync.setState({
+      userId: user.id,
+      cursor: null,
+      lastPushAt: 0,
+      lastSyncedAt: null,
+      uploadedImages: {},
+      lastImageCleanup: 0,
+    });
     useStore.getState().requestFullPush();
   }
   useSync.setState({ email: user.email ?? null, status: "idle", error: null });
@@ -135,6 +144,7 @@ async function runSync() {
   } finally {
     applying = false;
   }
+  markRemoteImages(cards);
   let cursor = sync.cursor;
   for (const r of [...folders, ...sets, ...cards, ...days, ...settingsRows]) {
     if (r.synced_at && (!cursor || Date.parse(r.synced_at) > Date.parse(cursor)))
@@ -152,6 +162,8 @@ async function runSync() {
     full,
   );
   if (!isEmptyPush(payload)) {
+    // images first, so a device that pulls the card can already fetch its picture
+    await uploadImages(sb, payload.cards);
     for (const chunk of chunkPush(payload)) {
       const { error } = await sb.rpc("push_changes", {
         p_folders: chunk.folders,
@@ -171,6 +183,7 @@ async function runSync() {
     status: "idle",
     error: null,
   });
+  await cleanUpRemoteImages(sb).catch(() => {});
 }
 
 /** Pull then push. Concurrent calls are coalesced into one follow-up run. */
@@ -207,6 +220,7 @@ function schedule(delay = AUTO_SYNC_DELAY) {
 export async function initSync() {
   if (!syncConfigured) return;
   const sb = await getClient();
+  setRemoteImageLoader((id) => downloadImage(sb, id));
 
   // Supabase warns against awaiting its own calls inside this callback.
   sb.auth.onAuthStateChange((_event, session) => setTimeout(() => onSession(session), 0));

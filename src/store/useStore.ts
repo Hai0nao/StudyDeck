@@ -21,7 +21,14 @@ export interface CardDraft {
   id?: string;
   term: string;
   def: string;
+  termImage?: string | null;
+  defImage?: string | null;
 }
+
+const draftImages = (d: CardDraft) => ({
+  termImage: d.termImage ?? null,
+  defImage: d.defImage ?? null,
+});
 
 /** Settings that follow you across devices. API keys and reminder state stay local. */
 export type SyncedSettings = Pick<
@@ -192,7 +199,9 @@ export const useStore = create<StoreState>()(
         createSet(data, cards) {
           const s = makeSet({
             ...data,
-            cards: cards.map((c) => makeCard(c.term.trim(), c.def.trim())),
+            cards: cards.map((c) =>
+              makeCard(c.term.trim(), c.def.trim(), Date.now(), draftImages(c)),
+            ),
           });
           newSetWithCards(s);
           return s.id;
@@ -211,18 +220,30 @@ export const useStore = create<StoreState>()(
               const prev = d.id ? old.get(d.id) : undefined;
               const term = d.term.trim();
               const def = d.def.trim();
+              const images = draftImages(d);
               if (!prev) {
-                const c = makeCard(term, def, now);
+                const c = makeCard(term, def, now, images);
                 touched.push(`card:${c.id}`);
                 return c;
               }
-              if (prev.term === term && prev.def === def) return prev;
+              const sameImages =
+                (prev.termImage ?? null) === images.termImage &&
+                (prev.defImage ?? null) === images.defImage;
+              if (prev.term === term && prev.def === def && sameImages) return prev;
               touched.push(`card:${prev.id}`);
               // Both sides rewritten → effectively a new fact, so its progress starts over.
               const rewritten = prev.term !== term && prev.def !== def;
               return rewritten
-                ? { ...prev, term, def, learn: 0 as const, srs: newSrs(now), modifiedAt: now }
-                : { ...prev, term, def, modifiedAt: now };
+                ? {
+                    ...prev,
+                    term,
+                    def,
+                    ...images,
+                    learn: 0 as const,
+                    srs: newSrs(now),
+                    modifiedAt: now,
+                  }
+                : { ...prev, term, def, ...images, modifiedAt: now };
             });
             const kept = new Set(cards.map((c) => c.id));
             const removed = s.cards.filter((c) => !kept.has(c.id));
@@ -240,7 +261,9 @@ export const useStore = create<StoreState>()(
         },
         appendCards(id, drafts) {
           const now = Date.now();
-          const added = drafts.map((d) => makeCard(d.term.trim(), d.def.trim(), now));
+          const added = drafts.map((d) =>
+            makeCard(d.term.trim(), d.def.trim(), now, draftImages(d)),
+          );
           set((st) => ({
             sets: st.sets.map((s) =>
               s.id === id
@@ -276,7 +299,10 @@ export const useStore = create<StoreState>()(
             folderId: src.folderId,
             termLang: src.termLang,
             defLang: src.defLang,
-            cards: src.cards.map((c) => ({ ...makeCard(c.term, c.def), star: c.star })),
+            cards: src.cards.map((c) => ({
+              ...makeCard(c.term, c.def, Date.now(), c),
+              star: c.star,
+            })),
           });
           newSetWithCards(copy);
           return copy.id;
@@ -652,6 +678,18 @@ function stamp(data: AppData, now: number): AppData {
 
 export const findSet = (sets: StudySet[], id: string | undefined) =>
   id ? sets.find((s) => s.id === id) : undefined;
+
+/** Every image id some card still uses. */
+export function referencedImages(sets: StudySet[]): Set<string> {
+  const out = new Set<string>();
+  for (const s of sets) {
+    for (const c of s.cards) {
+      if (c.termImage) out.add(c.termImage);
+      if (c.defImage) out.add(c.defImage);
+    }
+  }
+  return out;
+}
 
 /** This device's stats plus everything other signed-in devices reported. */
 export function combinedDays(

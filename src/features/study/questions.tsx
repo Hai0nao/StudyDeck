@@ -1,16 +1,46 @@
 import { useEffect, useRef, useState } from "react";
+import { CardImage } from "@/components/CardImage";
 import { gradeAnswer, type Grade } from "@/lib/grading";
+import type { Card } from "@/store/types";
+import { sideImage, sideText, type Side } from "./quiz";
 
+/** Text and/or image of one side of a card. */
+export function SideView({
+  card,
+  side,
+  className = "",
+  zoomable = false,
+}: {
+  card: Card;
+  side: Side;
+  className?: string;
+  zoomable?: boolean;
+}) {
+  const text = sideText(card, side);
+  const image = sideImage(card, side);
+  return (
+    <span className={`side-view ${className}`}>
+      {image && <CardImage id={image} zoomable={zoomable} />}
+      {text && <span className="side-text">{text}</span>}
+    </span>
+  );
+}
+
+/** Choices are card ids; each shows that card's answer side. */
 export function MultipleChoice({
   choices,
-  answer,
+  cards,
+  side,
+  answerId,
   picked,
   onPick,
 }: {
   choices: string[];
-  answer: string;
+  cards: Map<string, Card>;
+  side: Side;
+  answerId: string;
   picked: string | null;
-  onPick: (choice: string) => void;
+  onPick: (cardId: string) => void;
 }) {
   useEffect(() => {
     if (picked !== null) return;
@@ -24,18 +54,20 @@ export function MultipleChoice({
 
   return (
     <div className="choices">
-      {choices.map((c, i) => {
+      {choices.map((id, i) => {
+        const card = cards.get(id);
+        if (!card) return null;
         const state =
-          picked === null ? "" : c === answer ? "right" : c === picked ? "wrong" : "dim";
+          picked === null ? "" : id === answerId ? "right" : id === picked ? "wrong" : "dim";
         return (
           <button
-            key={i}
+            key={id}
             className={`choice ${state}`}
             disabled={picked !== null}
-            onClick={() => onPick(c)}
+            onClick={() => onPick(id)}
           >
             <span className="k">{i + 1}</span>
-            <span>{c}</span>
+            <SideView card={card} side={side} />
           </button>
         );
       })}

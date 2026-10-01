@@ -832,3 +832,77 @@
   align-items: flex-start;
   gap: 12px;
 }
+
+/* ---------- images in study modes ---------- */
+.fc-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-height: 100%;
+  min-height: 0;
+}
+.fc-img {
+  max-height: 220px;
+  width: auto;
+  flex-shrink: 1;
+  min-height: 0;
+}
+.fc-content:not(:has(.fc-text)) .fc-img {
+  max-height: 100%;
+}
+.q-img {
+  margin-top: 14px;
+  max-height: 240px;
+  width: auto;
+}
+.rv-img {
+  max-height: 200px;
+  width: auto;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.tile-img {
+  max-height: 70px;
+  width: auto;
+  pointer-events: none;
+}
+.side-view {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+.side-view > .card-img {
+  max-height: 120px;
+  width: auto;
+}
+.q-prompt.side-view > .card-img {
+  max-height: 240px;
+}
+.side-view.bold {
+  font-weight: 600;
+}
+.fb-answer .side-view > .card-img {
+  max-height: 160px;
+}
+.answer-line {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+@media (max-width: 640px) {
+  .fc-img {
+    max-height: 160px;
+  }
+  .tile-img {
+    max-height: 52px;
+  }
+}

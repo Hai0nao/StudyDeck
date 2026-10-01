@@ -150,6 +150,17 @@
   color: var(--text-3);
 }
 
+.row-side {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+.row-side > label {
+  flex: 1;
+  min-width: 0;
+}
+
 .add-row {
   display: flex;
   align-items: center;

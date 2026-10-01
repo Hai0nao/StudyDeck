@@ -1,6 +1,7 @@
 import { CalendarCheck, Coffee, Eye, Volume2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
+import { CardImage } from "@/components/CardImage";
 import { Segmented } from "@/components/ui";
 import { useLocalState } from "@/lib/hooks";
 import { previewIntervals, Rating, type Grade } from "@/lib/srs";
@@ -203,25 +204,43 @@ export function ReviewPage() {
 
       <div className="rv-card">
         <div className="rv-side">
-          <div className={`fc-text${front.length > 90 ? " long" : ""}`}>{front}</div>
-          <button
-            className="icon-btn sm"
-            onClick={() => speak(front, frontLang, settings.speech.rate)}
-            aria-label="Play audio"
-          >
-            <Volume2 />
-          </button>
+          <CardImage
+            id={prefs.front === "term" ? card.termImage : card.defImage}
+            className="rv-img"
+            zoomable
+          />
+          {front && (
+            <>
+              <div className={`fc-text${front.length > 90 ? " long" : ""}`}>{front}</div>
+              <button
+                className="icon-btn sm"
+                onClick={() => speak(front, frontLang, settings.speech.rate)}
+                aria-label="Play audio"
+              >
+                <Volume2 />
+              </button>
+            </>
+          )}
         </div>
         {shown && (
           <div className="rv-side">
-            <div className={`fc-text${back.length > 90 ? " long" : ""}`}>{back}</div>
-            <button
-              className="icon-btn sm"
-              onClick={() => speak(back, backLang, settings.speech.rate)}
-              aria-label="Play audio"
-            >
-              <Volume2 />
-            </button>
+            <CardImage
+              id={prefs.front === "term" ? card.defImage : card.termImage}
+              className="rv-img"
+              zoomable
+            />
+            {back && (
+              <>
+                <div className={`fc-text${back.length > 90 ? " long" : ""}`}>{back}</div>
+                <button
+                  className="icon-btn sm"
+                  onClick={() => speak(back, backLang, settings.speech.rate)}
+                  aria-label="Play audio"
+                >
+                  <Volume2 />
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

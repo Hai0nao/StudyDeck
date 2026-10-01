@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router";
+import { CardImage } from "@/components/CardImage";
 import { confirm } from "@/components/confirm";
 import { FolderSelect } from "@/components/FolderPicker";
 import { MasteryBar } from "@/components/SetCard";
@@ -262,8 +263,14 @@ export function SetPage() {
         <ul className="card-list">
           {cards.map((c) => (
             <li key={c.id} id={`card-${c.id}`} className={focusCard === c.id ? "focus" : ""}>
-              <div className="cl-term">{c.term}</div>
-              <div className="cl-def">{c.def}</div>
+              <div className="cl-term">
+                {c.term}
+                <CardImage id={c.termImage} className="cl-img" zoomable />
+              </div>
+              <div className="cl-def">
+                {c.def}
+                <CardImage id={c.defImage} className="cl-img" zoomable />
+              </div>
               <div className="cl-side">
                 <span className="cl-due faint num" title="Next review">
                   {c.srs.state === 0 ? "new" : relativeDue(c.srs.due, now)}

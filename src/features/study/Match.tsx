@@ -1,10 +1,12 @@
 import { Grid2x2, RotateCcw, Trophy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router";
+import { CardImage } from "@/components/CardImage";
 import { formatDuration } from "@/lib/time";
 import { sample, shuffle } from "@/lib/random";
 import { useStore } from "@/store/useStore";
 import type { StudySet } from "@/store/types";
+import { hasSide } from "./quiz";
 import { Finish, StudyShell } from "./StudyShell";
 
 const PAIRS = 6;
@@ -15,6 +17,7 @@ interface Tile {
   key: string;
   cardId: string;
   text: string;
+  image: string | null;
 }
 
 export function MatchPage() {
@@ -26,13 +29,13 @@ export function MatchPage() {
 
 function deal(set: StudySet): Tile[] {
   const cards = sample(
-    set.cards.filter((c) => c.term.trim() && c.def.trim()),
+    set.cards.filter((c) => hasSide(c, "term") && hasSide(c, "def")),
     PAIRS,
   );
   return shuffle(
     cards.flatMap((c) => [
-      { key: `${c.id}-t`, cardId: c.id, text: c.term },
-      { key: `${c.id}-d`, cardId: c.id, text: c.def },
+      { key: `${c.id}-t`, cardId: c.id, text: c.term, image: c.termImage ?? null },
+      { key: `${c.id}-d`, cardId: c.id, text: c.def, image: c.defImage ?? null },
     ]),
   );
 }
@@ -134,7 +137,8 @@ function Match({ set }: { set: StudySet }) {
               className={`tile${selected === t.key ? " sel" : ""}${wrong.includes(t.key) ? " bad" : ""}${matched.has(t.key) ? " done" : ""}`}
               onClick={() => tap(t)}
             >
-              {t.text}
+              <CardImage id={t.image} className="tile-img" />
+              {t.text && <span>{t.text}</span>}
             </button>
           ))}
         </div>

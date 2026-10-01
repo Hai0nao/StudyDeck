@@ -17,11 +17,18 @@ export const DEFAULT_SETTINGS: Settings = {
   learnRoundSize: 7,
 };
 
-export function makeCard(term = "", def = "", now = Date.now()): Card {
+export function makeCard(
+  term = "",
+  def = "",
+  now = Date.now(),
+  images: { termImage?: string | null; defImage?: string | null } = {},
+): Card {
   return {
     id: uid(),
     term,
     def,
+    termImage: images.termImage ?? null,
+    defImage: images.defImage ?? null,
     star: false,
     learn: 0,
     srs: newSrs(now),

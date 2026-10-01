@@ -15,13 +15,14 @@ import { toast } from "@/components/toast";
 import { Modal, Segmented, Switch } from "@/components/ui";
 import { KEY_HELP, MODEL_SUGGESTIONS, PROVIDER_LABELS } from "@/lib/ai";
 import { downloadFile, makeBackup, parseBackup } from "@/lib/backup";
+import { exportImages, importImages } from "@/lib/images";
 import {
   notificationsSupported,
   reminderIcs,
   requestNotificationPermission,
   showReminder,
 } from "@/lib/reminders";
-import { useStore } from "@/store/useStore";
+import { referencedImages, useStore } from "@/store/useStore";
 import type { Accent, AppData, Provider, Settings } from "@/store/types";
 import { SyncSection } from "./SyncSection";
 import "./settings.css";
@@ -111,7 +112,11 @@ export function SettingsPage() {
 
   const onImportFile = async (file: File) => {
     try {
-      const data = parseBackup(await file.text());
+      const text = await file.text();
+      const data = parseBackup(text);
+      // Images travel inside the backup as data URLs; put them back into IndexedDB.
+      const images = (JSON.parse(text) as { images?: Record<string, string> }).images;
+      if (images) await importImages(images);
       if (sets.length) {
         setPending(data); // ask whether to merge or replace
         return;
@@ -375,14 +380,15 @@ export function SettingsPage() {
       >
         <Row
           title="Back up"
-          desc="Download everything — sets, folders, progress and stats — as one JSON file."
+          desc="Download everything — sets, folders, images, progress and stats — as one JSON file."
         >
           <button
             className="btn btn-secondary btn-sm"
-            onClick={() => {
+            onClick={async () => {
+              const images = await exportImages([...referencedImages(sets)]);
               downloadFile(
                 `studydeck-backup-${new Date().toISOString().slice(0, 10)}.json`,
-                JSON.stringify(makeBackup({ sets, folders, days })),
+                JSON.stringify({ ...makeBackup({ sets, folders, days }), images }),
               );
               toast("Backup downloaded");
             }}

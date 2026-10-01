@@ -397,6 +397,98 @@ svg.spin {
   animation: spin 1s linear infinite;
 }
 
+/* ---------- card images ---------- */
+.card-img {
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: var(--r-md);
+  background: var(--surface-3);
+}
+.card-img.loading {
+  width: 120px;
+  height: 90px;
+  animation: pulse 1.2s ease-in-out infinite alternate;
+}
+.card-img.zoomable {
+  cursor: zoom-in;
+}
+@keyframes pulse {
+  to {
+    opacity: 0.45;
+  }
+}
+.img-zoom {
+  cursor: zoom-out;
+}
+.img-zoom img {
+  max-width: min(96vw, 1000px);
+  max-height: 90vh;
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+}
+
+.img-slot {
+  position: relative;
+  flex: none;
+  width: 76px;
+  height: 60px;
+  border-radius: var(--r-md);
+  border: 1.5px dashed var(--line-strong);
+  color: var(--text-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
+}
+.img-slot svg {
+  width: 18px;
+  height: 18px;
+}
+.img-slot:hover,
+.img-slot.over {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.img-slot.filled {
+  border: 0;
+  padding: 0;
+}
+.img-slot.filled .card-img {
+  width: 76px;
+  height: 60px;
+  object-fit: cover;
+}
+.img-slot-remove {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  color: var(--text-2);
+}
+.img-slot-remove:hover {
+  background: var(--again);
+  color: #fff;
+}
+.img-slot-remove svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* ---------- modal ---------- */
 .veil {
   position: fixed;

@@ -8,10 +8,14 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import App from "./App";
+import { collectLocalImageGarbage } from "./lib/images";
+import { referencedImages, useStore } from "./store/useStore";
 import { initSync } from "./sync/engine";
 
 registerSW({ immediate: true });
 void initSync();
+// Drop images left behind by deleted cards or edits that were never saved.
+collectLocalImageGarbage(referencedImages(useStore.getState().sets)).catch(() => {});
 
 if (import.meta.env.DEV) {
   // handy for poking at state from the devtools console

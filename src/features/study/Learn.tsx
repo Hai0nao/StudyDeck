@@ -8,8 +8,9 @@ import { shuffle } from "@/lib/random";
 import { speak } from "@/lib/speech";
 import { useStore } from "@/store/useStore";
 import type { Card, LearnLevel, StudySet } from "@/store/types";
-import { MultipleChoice, WrittenAnswer } from "./questions";
-import { buildChoices, other, sideText, type Side } from "./quiz";
+import { CardImage } from "@/components/CardImage";
+import { MultipleChoice, SideView, WrittenAnswer } from "./questions";
+import { buildChoices, canType, hasSide, other, sideImage, sideText, type Side } from "./quiz";
 import { Finish, StudyShell } from "./StudyShell";
 
 interface LearnOptions {
@@ -55,8 +56,10 @@ function poolOf(set: StudySet, opts: LearnOptions) {
 }
 
 function makeQuestion(card: Card, set: StudySet, opts: LearnOptions, poolSize: number): Question {
-  const prompt: Side =
+  let prompt: Side =
     opts.answerWith === "both" ? (Math.random() < 0.5 ? "term" : "def") : other(opts.answerWith);
+  // A side with neither text nor image can't be asked; flip the question instead.
+  if (!hasSide(card, prompt)) prompt = other(prompt);
   // New cards start as multiple choice, familiar ones are typed.
   let kind: Question["kind"] =
     opts.mc && opts.written
@@ -67,6 +70,8 @@ function makeQuestion(card: Card, set: StudySet, opts: LearnOptions, poolSize: n
         ? "written"
         : "mc";
   if (poolSize < 2) kind = "written";
+  // An image-only answer can't be typed.
+  if (!canType(card, other(prompt))) kind = "mc";
   return {
     cardId: card.id,
     kind,
@@ -142,10 +147,12 @@ function Learn({
     (correct: boolean) => {
       if (!card || !question) return;
       recordAnswer(set.id, card.id, correct);
+      // Typing masters a card; choosing only makes it familiar unless typing isn't possible.
+      const typeable = opts.written && canType(card, other(question.prompt));
       const level: LearnLevel = correct
         ? question.kind === "written"
           ? 2
-          : opts.written
+          : typeable
             ? 1
             : (Math.min(2, card.learn + 1) as LearnLevel)
         : 0;
@@ -368,15 +375,20 @@ function Learn({
         </span>
       </div>
       <div className="q-prompt-wrap">
-        <div className={`q-prompt${promptText.length > 90 ? " long" : ""}`}>{promptText}</div>
-        <button
-          className="icon-btn sm"
-          onClick={() => speak(promptText, promptLang, settings.speech.rate)}
-          aria-label="Play audio"
-          style={{ marginTop: 4 }}
-        >
-          <Volume2 />
-        </button>
+        <div className={`q-prompt${promptText.length > 90 ? " long" : ""}`}>
+          {promptText}
+          <CardImage id={sideImage(card, question.prompt)} className="q-img" zoomable />
+        </div>
+        {promptText && (
+          <button
+            className="icon-btn sm"
+            onClick={() => speak(promptText, promptLang, settings.speech.rate)}
+            aria-label="Play audio"
+            style={{ marginTop: 4 }}
+          >
+            <Volume2 />
+          </button>
+        )}
       </div>
 
       <p className="q-ask">
@@ -388,9 +400,11 @@ function Learn({
       {question.kind === "mc" ? (
         <MultipleChoice
           choices={question.choices}
-          answer={answer}
+          cards={byId}
+          side={answerSide}
+          answerId={card.id}
           picked={outcome?.picked ?? null}
-          onPick={(p) => setOutcome({ correct: p === answer, picked: p })}
+          onPick={(p) => setOutcome({ correct: p === card.id, picked: p })}
         />
       ) : (
         <WrittenAnswer
@@ -416,7 +430,7 @@ function Learn({
       {outcome && (
         <Feedback
           outcome={outcome}
-          answer={answer}
+          answer={<SideView card={card} side={answerSide} zoomable />}
           onContinue={() => commitAndNext(outcome.correct)}
           onOverride={() => commitAndNext(true)}
         />
@@ -432,7 +446,7 @@ function Feedback({
   onOverride,
 }: {
   outcome: Outcome;
-  answer: string;
+  answer: React.ReactNode;
   onContinue: () => void;
   onOverride: () => void;
 }) {

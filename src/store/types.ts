@@ -26,6 +26,9 @@ export interface Card {
   seen: number;
   correct: number;
   wrong: number;
+  /** image ids (see lib/images) shown on each side */
+  termImage?: string | null;
+  defImage?: string | null;
   createdAt: number;
   /** last local or synced change (epoch ms) — decides which copy wins when syncing */
   modifiedAt: number;

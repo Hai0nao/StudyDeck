@@ -28,6 +28,9 @@ device unless you export it.
   - With an API key: Claude, ChatGPT (OpenAI) or Gemini, called directly from the browser.
   - Without a key: copy the prompt into claude.ai or chatgpt.com, paste the reply back — StudyDeck reads it.
 - Paste import from Quizlet exports, spreadsheets or notes (tab, comma, dash, colon or custom separators).
+- **Images on either side of a card** — click the image slot, drop a file, or paste with
+  <kbd>Ctrl</kbd> <kbd>V</kbd> while typing in that field. Images are downscaled to 1000 px WebP,
+  kept in IndexedDB, shown in every study mode, included in backups and synced via Supabase Storage.
 - Folders (nested), search everything with <kbd>Ctrl</kbd> <kbd>K</kbd>, export a set as TSV, full JSON backup/restore.
 
 **Polished**
@@ -119,6 +122,9 @@ a few seconds after each edit, when the tab regains focus and every five minutes
 - Daily stats are stored per device and added together, so studying on two devices the same
   day never loses counts.
 - Study settings sync; AI API keys and reminder settings stay on each device.
+- Card images are uploaded to a private `card-images` storage bucket (one folder per user)
+  before the cards that use them, and downloaded on demand by other devices. Images no card
+  uses any more are cleaned up once a day.
 - Row-level security limits every account to its own rows. The schema lives in
   [`supabase/migrations`](supabase/migrations).
 
@@ -163,7 +169,7 @@ Anthropic SDK, vite-plugin-pwa, Vitest.
 
 ## Roadmap ideas
 
-- Images on cards
+- Image search (e.g. Unsplash) right inside the editor
 - Password reset and Google sign-in for sync
 - Blocks-style game and a “Spell” audio mode
 - Per-card AI explanations and example sentences

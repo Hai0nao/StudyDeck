@@ -14,6 +14,10 @@ interface SyncState {
   /** client time of the last successful upload (0 = never for this user) */
   lastPushAt: number;
   lastSyncedAt: number | null;
+  /** image ids known to be in cloud storage for this user */
+  uploadedImages: Record<string, true>;
+  /** last time unused images were removed from cloud storage */
+  lastImageCleanup: number;
   status: SyncStatus;
   error: string | null;
 }
@@ -27,6 +31,8 @@ export const useSync = create<SyncState>()(
       cursor: null,
       lastPushAt: 0,
       lastSyncedAt: null,
+      uploadedImages: {},
+      lastImageCleanup: 0,
       status: "off",
       error: null,
     }),
@@ -40,6 +46,8 @@ export const useSync = create<SyncState>()(
         cursor: s.cursor,
         lastPushAt: s.lastPushAt,
         lastSyncedAt: s.lastSyncedAt,
+        uploadedImages: s.uploadedImages,
+        lastImageCleanup: s.lastImageCleanup,
       }),
     },
   ),

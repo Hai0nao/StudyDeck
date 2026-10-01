@@ -7,7 +7,8 @@ import { useLocalState } from "@/lib/hooks";
 import { sample, shuffle } from "@/lib/random";
 import { useStore } from "@/store/useStore";
 import type { Card, StudySet } from "@/store/types";
-import { buildChoices, other, sideText, type Side } from "./quiz";
+import { SideView } from "./questions";
+import { buildChoices, canType, hasSide, other, sideImage, sideText, type Side } from "./quiz";
 import { StudyShell } from "./StudyShell";
 
 type Kind = "tf" | "mc" | "written" | "matching";
@@ -19,7 +20,9 @@ interface TestOptions {
 }
 
 type Question =
-  | { id: string; kind: "tf"; card: Card; prompt: Side; shown: string; isTrue: boolean }
+  /** `shownId`: the card whose answer side is displayed as the proposed match */
+  | { id: string; kind: "tf"; card: Card; prompt: Side; shownId: string; isTrue: boolean }
+  /** `choices`: card ids */
   | { id: string; kind: "mc"; card: Card; prompt: Side; choices: string[] }
   | { id: string; kind: "written"; card: Card; prompt: Side }
   | { id: string; kind: "matching"; cards: Card[]; prompt: Side; options: string[] };
@@ -40,13 +43,18 @@ export function TestPage() {
   return <Test set={set} />;
 }
 
-function pickPrompt(answerWith: TestOptions["answerWith"]): Side {
-  if (answerWith === "both") return Math.random() < 0.5 ? "term" : "def";
-  return other(answerWith);
+/** Pick which side to show; flip if the preferred side is empty for this card. */
+function pickPrompt(card: Card, answerWith: TestOptions["answerWith"]): Side {
+  const prompt: Side =
+    answerWith === "both" ? (Math.random() < 0.5 ? "term" : "def") : other(answerWith);
+  return hasSide(card, prompt) ? prompt : other(prompt);
 }
 
+const look = (c: Card, s: Side) =>
+  `${sideText(c, s).trim().toLowerCase()}|${sideImage(c, s) ?? ""}`;
+
 function buildTest(set: StudySet, opts: TestOptions): Question[] {
-  const usable = set.cards.filter((c) => c.term.trim() && c.def.trim());
+  const usable = set.cards.filter((c) => hasSide(c, "term") && hasSide(c, "def"));
   const cards = sample(usable, Math.min(opts.count, usable.length));
   let kinds = (Object.keys(opts.kinds) as Kind[]).filter((k) => opts.kinds[k]);
   if (usable.length < 3) kinds = kinds.filter((k) => k === "written" || k === "tf");
@@ -59,19 +67,31 @@ function buildTest(set: StudySet, opts: TestOptions): Question[] {
   const out: Question[] = [];
   let n = 0;
   const qid = () => `q${n++}`;
+  const choiceOrWritten = (card: Card, prompt: Side, kind: "mc" | "written") =>
+    // image-only answers can't be typed, so they become multiple choice
+    kind === "written" && canType(card, other(prompt))
+      ? out.push({ id: qid(), kind: "written", card, prompt })
+      : out.push({
+          id: qid(),
+          kind: "mc",
+          card,
+          prompt,
+          choices: buildChoices(card, usable, other(prompt)),
+        });
+
   for (const kind of ["tf", "mc", "written", "matching"] as Kind[]) {
     const list = buckets.get(kind) ?? [];
     if (kind === "matching") {
-      for (let i = 0; i < list.length; i += 5) {
-        const group = list.slice(i, i + 5);
+      const prompt: Side = opts.answerWith === "term" ? "def" : "term";
+      // the answer list is a text dropdown, so only cards with a text answer fit
+      const fit = list.filter((c) => canType(c, other(prompt)) && hasSide(c, prompt));
+      const rest = list.filter((c) => !fit.includes(c));
+      for (let i = 0; i < fit.length; i += 5) {
+        const group = fit.slice(i, i + 5);
         if (group.length < 2) {
-          // a lone leftover becomes a written question
-          group.forEach((card) =>
-            out.push({ id: qid(), kind: "written", card, prompt: pickPrompt(opts.answerWith) }),
-          );
+          rest.push(...group);
           continue;
         }
-        const prompt = pickPrompt(opts.answerWith);
         out.push({
           id: qid(),
           kind: "matching",
@@ -80,33 +100,26 @@ function buildTest(set: StudySet, opts: TestOptions): Question[] {
           options: shuffle(group.map((c) => sideText(c, other(prompt)))),
         });
       }
+      for (const card of rest) choiceOrWritten(card, pickPrompt(card, opts.answerWith), "written");
       continue;
     }
     for (const card of list) {
-      const prompt = pickPrompt(opts.answerWith);
+      const prompt = pickPrompt(card, opts.answerWith);
       if (kind === "tf") {
-        const isTrue = Math.random() < 0.5 || usable.length < 2;
         const decoy = shuffle(usable).find(
-          (c) => c.id !== card.id && sideText(c, other(prompt)) !== sideText(card, other(prompt)),
+          (c) => c.id !== card.id && look(c, other(prompt)) !== look(card, other(prompt)),
         );
+        const isTrue = Math.random() < 0.5 || !decoy;
         out.push({
           id: qid(),
           kind,
           card,
           prompt,
-          isTrue: isTrue || !decoy,
-          shown: isTrue || !decoy ? sideText(card, other(prompt)) : sideText(decoy, other(prompt)),
-        });
-      } else if (kind === "mc") {
-        out.push({
-          id: qid(),
-          kind,
-          card,
-          prompt,
-          choices: buildChoices(card, usable, other(prompt)),
+          isTrue,
+          shownId: isTrue || !decoy ? card.id : decoy.id,
         });
       } else {
-        out.push({ id: qid(), kind, card, prompt });
+        choiceOrWritten(card, prompt, kind as "mc" | "written");
       }
     }
   }
@@ -123,7 +136,7 @@ function grade(
     case "tf":
       return [{ cardId: q.card.id, ok: a === q.isTrue }];
     case "mc":
-      return [{ cardId: q.card.id, ok: a === sideText(q.card, other(q.prompt)) }];
+      return [{ cardId: q.card.id, ok: a === q.card.id }];
     case "written":
       return [
         {
@@ -154,6 +167,7 @@ function Test({ set }: { set: StudySet }) {
   const [questions, setQuestions] = useState<Question[] | null>(null);
   const [answers, setAnswers] = useState<Answers>({});
   const [submitted, setSubmitted] = useState(false);
+  const byId = useMemo(() => new Map(set.cards.map((c) => [c.id, c])), [set.cards]);
 
   const max = set.cards.length;
   const count = Math.min(Math.max(1, opts.count), max);
@@ -321,6 +335,7 @@ function Test({ set }: { set: StudySet }) {
             </div>
             <QuestionBody
               q={q}
+              cards={byId}
               value={answers[q.id]}
               onChange={(v) => setAnswer(q.id, v)}
               graded={!!res}
@@ -341,14 +356,18 @@ function Test({ set }: { set: StudySet }) {
   );
 }
 
+const pickedStyle = { borderColor: "var(--accent)", background: "var(--accent-soft)" };
+
 function QuestionBody({
   q,
+  cards,
   value,
   onChange,
   graded,
   lenient,
 }: {
   q: Question;
+  cards: Map<string, Card>;
   value: Answers[string] | undefined;
   onChange: (v: Answers[string]) => void;
   graded: boolean;
@@ -366,7 +385,7 @@ function QuestionBody({
           const ok = picks[c.id] === right;
           return (
             <div key={c.id} className="match-q-row">
-              <b>{sideText(c, q.prompt)}</b>
+              <SideView card={c} side={q.prompt} className="bold" zoomable />
               <select
                 className={`select${graded ? (ok ? " right" : " wrong") : ""}`}
                 value={picks[c.id] ?? ""}
@@ -388,42 +407,39 @@ function QuestionBody({
     );
   }
 
-  const prompt = sideText(q.card, q.prompt);
-  const answer = sideText(q.card, other(q.prompt));
+  const answerSide = other(q.prompt);
+  const promptText = sideText(q.card, q.prompt);
+  const prompt = (
+    <SideView
+      card={q.card}
+      side={q.prompt}
+      className={`q-prompt${promptText.length > 90 ? " long" : ""}`}
+      zoomable
+    />
+  );
 
   if (q.kind === "tf") {
+    const shown = cards.get(q.shownId) ?? q.card;
     return (
       <>
         <div className="tf-pair">
           <div>
             <span className="q-ask">{q.prompt === "term" ? "Term" : "Definition"}</span>
-            <div className="q-prompt">{prompt}</div>
+            {prompt}
           </div>
           <div>
             <span className="q-ask">{q.prompt === "term" ? "Definition" : "Term"}</span>
-            <div className="q-prompt">{q.shown}</div>
+            <SideView card={shown} side={answerSide} className="q-prompt" zoomable />
           </div>
         </div>
         <div className="tf-row">
           {[true, false].map((v) => {
-            const state = !graded
-              ? value === v
-                ? "right"
-                : ""
-              : v === q.isTrue
-                ? "right"
-                : value === v
-                  ? "wrong"
-                  : "dim";
+            const state = !graded ? "" : v === q.isTrue ? "right" : value === v ? "wrong" : "dim";
             return (
               <button
                 key={String(v)}
                 className={`choice ${state}`}
-                style={
-                  !graded && value === v
-                    ? { borderColor: "var(--accent)", background: "var(--accent-soft)" }
-                    : undefined
-                }
+                style={!graded && value === v ? pickedStyle : undefined}
                 disabled={graded}
                 onClick={() => onChange(v)}
               >
@@ -432,55 +448,65 @@ function QuestionBody({
             );
           })}
         </div>
-        {graded && !q.isTrue && <p className="q-ask">Correct match: {answer}</p>}
+        {graded && !q.isTrue && (
+          <div className="q-ask answer-line">
+            Correct match: <SideView card={q.card} side={answerSide} />
+          </div>
+        )}
       </>
     );
   }
 
-  return (
-    <>
-      <div className={`q-prompt${prompt.length > 90 ? " long" : ""}`}>{prompt}</div>
-      {q.kind === "mc" ? (
+  if (q.kind === "mc") {
+    return (
+      <>
+        {prompt}
         <div className="choices">
-          {q.choices.map((c, i) => {
-            const state = !graded ? "" : c === answer ? "right" : c === value ? "wrong" : "dim";
-            const picked = !graded && value === c;
+          {q.choices.map((id, i) => {
+            const c = cards.get(id);
+            if (!c) return null;
+            const state = !graded
+              ? ""
+              : id === q.card.id
+                ? "right"
+                : id === value
+                  ? "wrong"
+                  : "dim";
             return (
               <button
-                key={i}
+                key={id}
                 className={`choice ${state}`}
-                style={
-                  picked
-                    ? { borderColor: "var(--accent)", background: "var(--accent-soft)" }
-                    : undefined
-                }
+                style={!graded && value === id ? pickedStyle : undefined}
                 disabled={graded}
-                onClick={() => onChange(c)}
+                onClick={() => onChange(id)}
               >
                 <span className="k">{i + 1}</span>
-                <span>{c}</span>
+                <SideView card={c} side={answerSide} />
               </button>
             );
           })}
         </div>
-      ) : (
-        <>
-          <div className="write-row">
-            <input
-              className={`input${graded ? (gradeAnswer(String(value ?? ""), answer, lenient) !== "wrong" ? " right" : " wrong") : ""}`}
-              value={String(value ?? "")}
-              disabled={graded}
-              placeholder="Type the answer"
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(e) => onChange(e.target.value)}
-            />
-          </div>
-          {graded && gradeAnswer(String(value ?? ""), answer, lenient) === "wrong" && (
-            <p className="q-ask">Answer: {answer}</p>
-          )}
-        </>
-      )}
+      </>
+    );
+  }
+
+  const answer = sideText(q.card, answerSide);
+  const right = gradeAnswer(String(value ?? ""), answer, lenient) !== "wrong";
+  return (
+    <>
+      {prompt}
+      <div className="write-row">
+        <input
+          className={`input${graded ? (right ? " right" : " wrong") : ""}`}
+          value={String(value ?? "")}
+          disabled={graded}
+          placeholder="Type the answer"
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </div>
+      {graded && !right && <p className="q-ask">Answer: {answer}</p>}
     </>
   );
 }

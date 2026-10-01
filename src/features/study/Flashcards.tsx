@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router";
+import { CardImage } from "@/components/CardImage";
 import { Modal, Switch } from "@/components/ui";
 import { useHotkeys, useLocalState } from "@/lib/hooks";
 import { shuffle } from "@/lib/random";
@@ -303,12 +304,14 @@ function Flashcards({ set }: { set: StudySet }) {
             {
               text: frontText,
               lang: frontLang,
+              image: opts.front === "term" ? card.termImage : card.defImage,
               cls: "front",
               label: opts.front === "term" ? "Term" : "Definition",
             },
             {
               text: backText,
               lang: backLang,
+              image: opts.front === "term" ? card.defImage : card.termImage,
               cls: "back",
               label: opts.front === "term" ? "Definition" : "Term",
             },
@@ -331,7 +334,14 @@ function Flashcards({ set }: { set: StudySet }) {
                   <Star fill={card.star ? "currentColor" : "none"} />
                 </button>
               </div>
-              <div className={`fc-text${long(side.text) ? " long" : ""}`}>{side.text}</div>
+              <div className={`fc-content${side.image ? " has-img" : ""}`}>
+                <CardImage id={side.image} className="fc-img" />
+                {side.text && (
+                  <div className={`fc-text${long(side.text) || side.image ? " long" : ""}`}>
+                    {side.text}
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>

@@ -150,6 +150,12 @@
   border-left: 1px solid var(--line);
   padding-left: 18px;
 }
+.cl-img {
+  margin-top: 8px;
+  max-height: 96px;
+  max-width: 160px;
+  width: auto;
+}
 .cl-side {
   display: flex;
   align-items: center;
