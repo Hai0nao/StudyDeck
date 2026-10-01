@@ -173,7 +173,7 @@ Anthropic SDK, vite-plugin-pwa, Vitest.
 - Password reset and Google sign-in for sync
 - Blocks-style game and a “Spell” audio mode
 - Per-card AI explanations and example sentences
-
+- Hello
 ## License
 
 [MIT](LICENSE)
