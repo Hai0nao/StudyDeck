@@ -5,6 +5,9 @@
 
 [build.environment]
   NODE_VERSION = "24"
+  # Cloud sync. Both values are public: the publishable key only allows what row-level security permits.
+  VITE_SUPABASE_URL = "https://zdnhvcqtfoldsxwfqsno.supabase.co"
+  VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_3cpJEKiPcp9TP-IYzfrULw_3qXXuXcP"
 
 # The service worker and HTML must always be revalidated so updates reach users.
 [[headers]]
