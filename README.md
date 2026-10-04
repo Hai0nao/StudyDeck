@@ -76,9 +76,9 @@ The app is hosted on Netlify at https://flashcardhaiii.netlify.app. Build settin
 project (**Project configuration → Build & deploy → Link repository**), every push to `main`
 deploys automatically and pull requests get preview URLs.
 
-The build needs two environment variables for cloud sync, set in Netlify under
-**Project configuration → Environment variables**: `VITE_SUPABASE_URL` and
-`VITE_SUPABASE_PUBLISHABLE_KEY`.
+The build needs two environment variables for cloud sync, `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_PUBLISHABLE_KEY`. They are set in `netlify.toml` (both are public values), which
+takes precedence over **Project configuration → Environment variables** in Netlify.
 
 GitHub Actions (`ci.yml`) runs lint, tests and a build on every push and pull request.
 
